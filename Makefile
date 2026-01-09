@@ -1,0 +1,44 @@
+.PHONY: help run build test clean docker-up docker-down migrate-up migrate-down
+
+# Variáveis
+APP_NAME=cineus-api
+BUILD_DIR=./bin
+
+help: ## Mostra esta ajuda
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+run: ## Roda a aplicação em modo desenvolvimento
+	go run cmd/api/main.go
+
+build: ## Compila a aplicação
+	go build -o $(BUILD_DIR)/$(APP_NAME) cmd/api/main.go
+
+test: ## Roda os testes
+	go test -v ./...
+
+test-coverage: ## Roda os testes com cobertura
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+
+clean: ## Limpa arquivos de build
+	rm -rf $(BUILD_DIR)
+	rm -f coverage.out coverage.html
+
+docker-up: ## Sobe os containers (Postgres + Redis)
+	docker-compose up -d
+
+docker-down: ## Para os containers
+	docker-compose down
+
+docker-logs: ## Mostra logs dos containers
+	docker-compose logs -f
+
+migrate-up: ## Roda as migrations
+	@echo "TODO: implementar migrations"
+
+migrate-down: ## Reverte a última migration
+	@echo "TODO: implementar migrations"
+
+deps: ## Baixa as dependências
+	go mod download
+	go mod tidy
