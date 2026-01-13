@@ -1,8 +1,9 @@
-.PHONY: help run build test clean docker-up docker-down migrate-up migrate-down
+.PHONY: help run build test clean docker-up docker-down migrate-up migrate-down migrate-create
 
 # Variáveis
 APP_NAME=cineus-api
 BUILD_DIR=./bin
+DATABASE_URL=postgres://cineus:cineus@localhost:5432/cineus?sslmode=disable
 
 help: ## Mostra esta ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -33,11 +34,17 @@ docker-down: ## Para os containers
 docker-logs: ## Mostra logs dos containers
 	docker-compose logs -f
 
-migrate-up: ## Roda as migrations
-	@echo "TODO: implementar migrations"
+migrate-up: ## Aplica todas as migrations
+	migrate -path migrations -database "$(DATABASE_URL)" up
 
 migrate-down: ## Reverte a última migration
-	@echo "TODO: implementar migrations"
+	migrate -path migrations -database "$(DATABASE_URL)" down 1
+
+migrate-reset: ## Reverte TODAS as migrations
+	migrate -path migrations -database "$(DATABASE_URL)" down -all
+
+migrate-create: ## Cria uma nova migration (usar: make migrate-create name=nome_da_migration)
+	migrate create -ext sql -dir migrations -seq $(name)
 
 deps: ## Baixa as dependências
 	go mod download
