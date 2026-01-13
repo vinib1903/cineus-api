@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/vinib1903/cineus-api/internal/app/auth"
 	"github.com/vinib1903/cineus-api/internal/config"
+	infraauth "github.com/vinib1903/cineus-api/internal/infra/auth"
 	"github.com/vinib1903/cineus-api/internal/infra/db"
 	"github.com/vinib1903/cineus-api/internal/infra/repo"
 	httpport "github.com/vinib1903/cineus-api/internal/ports/http"
@@ -24,7 +26,7 @@ func main() {
 	// Exibe o logo
 	printLogo()
 
-	// Cria um contexto que será cancelado quando a aplicação receber sinal de término
+	// Cria um contexto
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -38,11 +40,20 @@ func main() {
 	log.Println("Database connected successfully!")
 
 	// Cria os repositórios
-	_ = repo.NewUserRepository(dbPool)
-	_ = repo.NewRoomRepository(dbPool)
+	userRepo := repo.NewUserRepository(dbPool)
+
+	// Cria os serviços de infraestrutura
+	passwordHasher := infraauth.NewPasswordHasher(10)
+	jwtManager := infraauth.NewJWTManager(cfg.JWT.Secret, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
+	idGenerator := infraauth.NewIDGenerator()
+
+	// Cria os serviços de aplicação
+	authService := auth.NewService(userRepo, passwordHasher, jwtManager, idGenerator)
 
 	// Cria o router HTTP
-	router := httpport.NewRouter(httpport.RouterConfig{})
+	router := httpport.NewRouter(httpport.RouterConfig{
+		AuthService: authService,
+	})
 
 	// Configura o servidor HTTP
 	server := &http.Server{
@@ -53,7 +64,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Inicia o servidor em uma goroutine
+	// Inicia o servidor
 	go func() {
 		log.Printf("Server starting on port %s...", cfg.Server.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -70,7 +81,6 @@ func main() {
 	waitForShutdown(server, cancel)
 }
 
-// printLogo exibe o logo do CineUs.
 func printLogo() {
 	logo := `                                        
  ▄▄▄▄▄▄▄                 ▄▄▄  ▄▄▄       
@@ -82,7 +92,6 @@ func printLogo() {
 	color.Blue(logo)
 }
 
-// waitForShutdown aguarda sinais de término e faz shutdown gracioso.
 func waitForShutdown(server *http.Server, cancel context.CancelFunc) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -90,14 +99,11 @@ func waitForShutdown(server *http.Server, cancel context.CancelFunc) {
 	sig := <-quit
 	log.Printf("\nReceived signal: %v. Shutting down...", sig)
 
-	// Cancela o contexto
 	cancel()
 
-	// Cria contexto com timeout para o shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	// Faz shutdown gracioso do servidor HTTP
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
