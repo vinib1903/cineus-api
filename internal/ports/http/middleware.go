@@ -1,7 +1,9 @@
 package http
 
 import (
+	"bufio"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -42,6 +44,23 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Hijack implementa http.Hijacker para suportar WebSocket.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	// Verifica se o ResponseWriter original suporta Hijack
+	hijacker, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hijacker.Hijack()
+}
+
+// Flush implementa http.Flusher para suportar streaming.
+func (rw *responseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // Recoverer é um middleware que recupera de panics.
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +78,12 @@ func Recoverer(next http.Handler) http.Handler {
 // CORS adiciona headers para permitir requisições cross-origin.
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Não aplicar CORS em WebSocket upgrades
+		if r.Header.Get("Upgrade") == "websocket" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Permite qualquer origem em desenvolvimento
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")

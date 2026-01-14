@@ -18,6 +18,7 @@ import (
 	"github.com/vinib1903/cineus-api/internal/infra/db"
 	"github.com/vinib1903/cineus-api/internal/infra/repo"
 	httpport "github.com/vinib1903/cineus-api/internal/ports/http"
+	"github.com/vinib1903/cineus-api/internal/ports/ws"
 )
 
 func main() {
@@ -49,12 +50,17 @@ func main() {
 	authService := auth.NewService(userRepo, passwordHasher, jwtManager, idGenerator)
 	roomService := approom.NewService(roomRepo, idGenerator)
 
+	// WebSocket hub
+	wsHub := ws.NewHub()
+	wsHandler := ws.NewHandler(wsHub, roomRepo)
+
 	// HTTP Router
 	router := httpport.NewRouter(httpport.RouterConfig{
 		AuthService: authService,
 		RoomService: roomService,
 		UserRepo:    userRepo,
 		JWTManager:  jwtManager,
+		WSHandler:   wsHandler,
 	})
 
 	// HTTP Server
@@ -75,6 +81,7 @@ func main() {
 
 	fmt.Printf("\n-> Server ready on http://localhost:%s\n", cfg.Server.Port)
 	fmt.Printf("-> Health check: http://localhost:%s/health\n", cfg.Server.Port)
+	fmt.Printf("-> WebSocket: ws://localhost:%s/ws/room/{roomId}\n", cfg.Server.Port)
 	fmt.Printf("-> Environment: %s\n\n", cfg.Server.Environment)
 
 	waitForShutdown(server, cancel)

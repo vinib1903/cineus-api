@@ -8,6 +8,7 @@ import (
 	"github.com/vinib1903/cineus-api/internal/domain/user"
 	infraauth "github.com/vinib1903/cineus-api/internal/infra/auth"
 	"github.com/vinib1903/cineus-api/internal/ports/http/handlers"
+	"github.com/vinib1903/cineus-api/internal/ports/ws"
 )
 
 // RouterConfig contém as dependências do router.
@@ -16,6 +17,7 @@ type RouterConfig struct {
 	RoomService *approom.Service
 	UserRepo    user.Repository
 	JWTManager  *infraauth.JWTManager
+	WSHandler   *ws.Handler
 }
 
 // NewRouter cria e configura o router HTTP.
@@ -46,7 +48,7 @@ func NewRouter(cfg RouterConfig) *chi.Mux {
 			r.Post("/login", authHandler.Login)
 		})
 
-		// Room routes (algumas públicas)
+		// Room routes
 		r.Route("/rooms", func(r chi.Router) {
 			// Rotas públicas
 			r.Get("/", roomHandler.ListPublic)
@@ -62,10 +64,22 @@ func NewRouter(cfg RouterConfig) *chi.Mux {
 			})
 		})
 
-		// Rotas protegidas gerais
+		// User routes (protegidas)
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware(cfg.JWTManager))
 			r.Get("/me", userHandler.Me)
+		})
+	})
+
+	// WebSocket routes
+	r.Route("/ws", func(r chi.Router) {
+		// Estatísticas (pública)
+		r.Get("/stats", cfg.WSHandler.GetStats)
+
+		// Conexão WebSocket (protegida)
+		r.Group(func(r chi.Router) {
+			r.Use(AuthMiddleware(cfg.JWTManager))
+			r.Get("/room/{roomId}", cfg.WSHandler.HandleConnection)
 		})
 	})
 
