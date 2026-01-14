@@ -4,12 +4,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/vinib1903/cineus-api/internal/app/auth"
+	"github.com/vinib1903/cineus-api/internal/domain/user"
+	infraauth "github.com/vinib1903/cineus-api/internal/infra/auth"
 	"github.com/vinib1903/cineus-api/internal/ports/http/handlers"
 )
 
 // RouterConfig contém as dependências do router.
 type RouterConfig struct {
 	AuthService *auth.Service
+	UserRepo    user.Repository
+	JWTManager  *infraauth.JWTManager
 }
 
 // NewRouter cria e configura o router HTTP.
@@ -26,16 +30,26 @@ func NewRouter(cfg RouterConfig) *chi.Mux {
 	// Handlers
 	healthHandler := handlers.NewHealthHandler()
 	authHandler := handlers.NewAuthHandler(cfg.AuthService)
+	userHandler := handlers.NewUserHandler(cfg.UserRepo)
 
 	// Rotas públicas
 	r.Get("/health", healthHandler.Health)
 
 	// Rotas da API v1
 	r.Route("/api/v1", func(r chi.Router) {
-		// Auth routes
+		// Auth routes (públicas)
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
+		})
+
+		// Rotas protegidas (requerem autenticação)
+		r.Group(func(r chi.Router) {
+			// Aplica o middleware de autenticação
+			r.Use(AuthMiddleware(cfg.JWTManager))
+
+			// User routes
+			r.Get("/me", userHandler.Me)
 		})
 	})
 

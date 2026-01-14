@@ -53,6 +53,8 @@ func main() {
 	// Cria o router HTTP
 	router := httpport.NewRouter(httpport.RouterConfig{
 		AuthService: authService,
+		UserRepo:    userRepo,
+		JWTManager:  jwtManager,
 	})
 
 	// Configura o servidor HTTP
