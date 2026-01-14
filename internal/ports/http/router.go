@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/vinib1903/cineus-api/internal/app/auth"
+	approom "github.com/vinib1903/cineus-api/internal/app/room"
 	"github.com/vinib1903/cineus-api/internal/domain/user"
 	infraauth "github.com/vinib1903/cineus-api/internal/infra/auth"
 	"github.com/vinib1903/cineus-api/internal/ports/http/handlers"
@@ -12,6 +13,7 @@ import (
 // RouterConfig contém as dependências do router.
 type RouterConfig struct {
 	AuthService *auth.Service
+	RoomService *approom.Service
 	UserRepo    user.Repository
 	JWTManager  *infraauth.JWTManager
 }
@@ -31,6 +33,7 @@ func NewRouter(cfg RouterConfig) *chi.Mux {
 	healthHandler := handlers.NewHealthHandler()
 	authHandler := handlers.NewAuthHandler(cfg.AuthService)
 	userHandler := handlers.NewUserHandler(cfg.UserRepo)
+	roomHandler := handlers.NewRoomHandler(cfg.RoomService)
 
 	// Rotas públicas
 	r.Get("/health", healthHandler.Health)
@@ -43,12 +46,25 @@ func NewRouter(cfg RouterConfig) *chi.Mux {
 			r.Post("/login", authHandler.Login)
 		})
 
-		// Rotas protegidas (requerem autenticação)
-		r.Group(func(r chi.Router) {
-			// Aplica o middleware de autenticação
-			r.Use(AuthMiddleware(cfg.JWTManager))
+		// Room routes (algumas públicas)
+		r.Route("/rooms", func(r chi.Router) {
+			// Rotas públicas
+			r.Get("/", roomHandler.ListPublic)
+			r.Get("/{id}", roomHandler.GetByID)
 
-			// User routes
+			// Rotas protegidas
+			r.Group(func(r chi.Router) {
+				r.Use(AuthMiddleware(cfg.JWTManager))
+				r.Post("/", roomHandler.Create)
+				r.Get("/my", roomHandler.ListMy)
+				r.Post("/join", roomHandler.JoinByCode)
+				r.Delete("/{id}", roomHandler.Delete)
+			})
+		})
+
+		// Rotas protegidas gerais
+		r.Group(func(r chi.Router) {
+			r.Use(AuthMiddleware(cfg.JWTManager))
 			r.Get("/me", userHandler.Me)
 		})
 	})

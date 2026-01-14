@@ -12,6 +12,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/vinib1903/cineus-api/internal/app/auth"
+	approom "github.com/vinib1903/cineus-api/internal/app/room"
 	"github.com/vinib1903/cineus-api/internal/config"
 	infraauth "github.com/vinib1903/cineus-api/internal/infra/auth"
 	"github.com/vinib1903/cineus-api/internal/infra/db"
@@ -20,17 +21,13 @@ import (
 )
 
 func main() {
-	// Carrega as configurações do .env
 	cfg := config.Load()
-
-	// Exibe o logo
 	printLogo()
 
-	// Cria um contexto
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Conecta ao banco de dados
+	// Database
 	log.Println("Connecting to database...")
 	dbPool, err := db.NewPostgresPool(ctx, db.DefaultPostgresConfig(cfg.Database.URL))
 	if err != nil {
@@ -39,25 +36,28 @@ func main() {
 	defer dbPool.Close()
 	log.Println("Database connected successfully!")
 
-	// Cria os repositórios
+	// Repositories
 	userRepo := repo.NewUserRepository(dbPool)
+	roomRepo := repo.NewRoomRepository(dbPool)
 
-	// Cria os serviços de infraestrutura
+	// Infrastructure services
 	passwordHasher := infraauth.NewPasswordHasher(10)
 	jwtManager := infraauth.NewJWTManager(cfg.JWT.Secret, cfg.JWT.AccessTokenTTL, cfg.JWT.RefreshTokenTTL)
 	idGenerator := infraauth.NewIDGenerator()
 
-	// Cria os serviços de aplicação
+	// Application services
 	authService := auth.NewService(userRepo, passwordHasher, jwtManager, idGenerator)
+	roomService := approom.NewService(roomRepo, idGenerator)
 
-	// Cria o router HTTP
+	// HTTP Router
 	router := httpport.NewRouter(httpport.RouterConfig{
 		AuthService: authService,
+		RoomService: roomService,
 		UserRepo:    userRepo,
 		JWTManager:  jwtManager,
 	})
 
-	// Configura o servidor HTTP
+	// HTTP Server
 	server := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
 		Handler:      router,
@@ -66,7 +66,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Inicia o servidor
 	go func() {
 		log.Printf("Server starting on port %s...", cfg.Server.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -74,12 +73,10 @@ func main() {
 		}
 	}()
 
-	// Exibe informações
 	fmt.Printf("\n-> Server ready on http://localhost:%s\n", cfg.Server.Port)
 	fmt.Printf("-> Health check: http://localhost:%s/health\n", cfg.Server.Port)
 	fmt.Printf("-> Environment: %s\n\n", cfg.Server.Environment)
 
-	// Aguarda sinal de término
 	waitForShutdown(server, cancel)
 }
 
@@ -100,7 +97,6 @@ func waitForShutdown(server *http.Server, cancel context.CancelFunc) {
 
 	sig := <-quit
 	log.Printf("\nReceived signal: %v. Shutting down...", sig)
-
 	cancel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -109,6 +105,5 @@ func waitForShutdown(server *http.Server, cancel context.CancelFunc) {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
-
 	log.Println("Server stopped gracefully.")
 }
